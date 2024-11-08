@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Vehicle Location Tracker</title>
+    <style>
+        /* Set the size of the div element that contains the map */
+        #map {
+            height: 90vh;  /* 90% of viewport height */
+            width: 100%;    /* Full width */
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #timestamp {
+            text-align: center;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+    <!-- Google Maps JavaScript API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5OpbgmiRFKRox6ad3DlYNIIfirzcvOHc"></script>
+</head>
+<body>
+    <h2 style="text-align:center;">Live Vehicle Location Tracker</h2>
+    <div id="map"></div>
+    <p id="timestamp">Last Update: N/A</p>
+
+    <script>
+        // Google Maps Initialization
+        let map;
+        let marker;
+        let infoWindow;
+        let pathCoordinates = [];
+        let vehiclePath;
+
+        function initMap() {
+            // Default location (set to the first fetched data or a fixed location)
+            const initialPosition = { lat: 0, lng: 0 };
+
+            // Create the map centered at initialPosition
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 15,
+                center: initialPosition,
+            });
+
+            // Create a marker at the initial position with a custom icon
+            marker = new google.maps.Marker({
+                position: initialPosition,
+                map: map,
+                title: "Vehicle Location",
+                icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png' // Example icon
+            });
+
+            // Initialize an info window
+            infoWindow = new google.maps.InfoWindow();
+
+            // Add click listener to marker to show info window
+            marker.addListener('click', () => {
+                if (pathCoordinates.length > 0) {
+                    const latest = pathCoordinates[pathCoordinates.length - 1];
+                    infoWindow.setContent(`<div>Vehicle Location<br>Latitude: ${latest.lat}<br>Longitude: ${latest.lng}</div>`);
+                    infoWindow.open(map, marker);
+                } else {
+                    infoWindow.setContent(`<div>Vehicle Location not available.</div>`);
+                    infoWindow.open(map, marker);
+                }
+            });
+
+            // Initialize polyline for the path
+            vehiclePath = new google.maps.Polyline({
+                path: pathCoordinates,
+                geodesic: true,
+                strokeColor: '#FF0000',
+                strokeOpacity: 1.0,
+                strokeWeight: 2
+            });
+
+            vehiclePath.setMap(map);
+        }
+
+        // Function to fetch data from ThingSpeak
+        async function fetchData() {
+            const channelID = '2734875'; // Replace with your ThingSpeak Channel ID
+            const readAPIKey = 'LPMGJ2HRRFPLB56D'; // Replace with your ThingSpeak Read API Key
+
+            // ThingSpeak API URL to fetch the latest feed
+            const url = `https://api.thingspeak.com/channels/${channelID}/feeds/last.json?api_key=${readAPIKey}`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                const latitude = parseFloat(data.field1);
+                const longitude = parseFloat(data.field2);
+                const timestamp = data.created_at; // ISO 8601 format
+
+                if (!isNaN(latitude) && !isNaN(longitude)) {
+                    const newPosition = { lat: latitude, lng: longitude };
+                    updateMap(newPosition);
+                    updateTimestamp(timestamp);
+                } else {
+                    console.error("Invalid latitude or longitude data.");
+                }
+            } catch (error) {
+                console.error("Error fetching data from ThingSpeak:", error);
+            }
+        }
+
+        // Function to update the map with the new position
+        function updateMap(position) {
+            map.setCenter(position);
+            marker.setPosition(position);
+            pathCoordinates.push(position);
+            vehiclePath.setPath(pathCoordinates);
+        }
+
+        // Function to update the timestamp display
+        function updateTimestamp(timestamp) {
+            // Convert ISO 8601 timestamp to a more readable format
+            const date = new Date(timestamp);
+            const formattedTime = date.toLocaleString();
+            document.getElementById("timestamp").innerText = `Last Update: ${formattedTime}`;
+        }
+
+        // Initialize the map when the window loads
+        window.onload = () => {
+            initMap();
+            fetchData(); // Fetch data immediately on load
+            // Set interval to fetch data every minute (60000 ms)
+            setInterval(fetchData, 60000);
+        };
+    </script>
+</body>
+</html>
